@@ -4,10 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.protocol.types.Field;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import ru.itis.dataprocessor.dto.PersonDto;
 
 @Service
@@ -15,25 +13,25 @@ import ru.itis.dataprocessor.dto.PersonDto;
 public class KafkaConsumer {
 
     private final DataProcessingService dataProcessingService;
-    private final WebClient webClient = WebClient.create("http://localhost:8080");
+    private final KafkaProducerService kafkaProducerService;
+    private final NotificationProducer notificationProducer;
+    private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "test-topic", groupId = "test-group")
-    public void listen(ConsumerRecord<String, String> record) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        PersonDto person = objectMapper.readValue(record.value(), PersonDto.class);
-        long receivedTime = System.currentTimeMillis();
-        System.out.println("📥 Получено: " + record.value() + " | Задержка: " + (receivedTime - record.timestamp()) + "ms");
-        PersonDto processedData = dataProcessingService.process(person);
+    @KafkaListener(topics = "raw_data", groupId = "processor-group")
+    public void listen(ConsumerRecord<String, String> record) {
+        try {
+            PersonDto person = objectMapper.readValue(record.value(), PersonDto.class);
+            long receivedTime = System.currentTimeMillis();
+            System.out.println("📥 Получено: " + record.value() + " | Задержка: " + (receivedTime - record.timestamp()) + "ms");
 
-        // Отправляем обработанные данные в StorageService
-        webClient.post()
-                .uri("/storage/save")
-                .bodyValue(processedData)
-                .retrieve()
-                .bodyToMono(Void.class)
-                .subscribe();
+            PersonDto processedData = dataProcessingService.process(person);
+            String message = objectMapper.writeValueAsString(processedData);
+            kafkaProducerService.send(message);
 
-        System.out.println("Отправлено в StorageService");
+            notificationProducer.sendNotification("✅ DataProcessor: обработка прошла успешно");
+        } catch (Exception e) {
+            notificationProducer.sendNotification("❌ DataProcessor: ошибка обработки — " + e.getMessage());
+            System.err.println("❌ Ошибка обработки: " + e.getMessage());
+        }
     }
 }
-

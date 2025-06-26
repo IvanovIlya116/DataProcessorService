@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-processor-deployment
+  labels:
+    app: data-processor-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: data-processor-service
+  template:
+    metadata:
+      labels:
+        app: data-processor-service
+    spec:
+      containers:
+        - name: data-processor
+          image: dataprocessorservice:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: shared-logs
+              mountPath: /shared-logs
+      volumes:
+        - name: shared-logs
+          hostPath:
+            path: /shared-logs
+            type: DirectoryOrCreate

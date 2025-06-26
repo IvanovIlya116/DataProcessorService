@@ -13,15 +13,16 @@ import ru.itis.dataprocessor.service.DataProcessingService;
 public class DataProcessorController {
 
     private final DataProcessingService dataProcessingService;
-    private final WebClient webClient = WebClient.create("http://localhost:8080");
+    private final WebClient.Builder webClientBuilder;
 
     @PostMapping("/data")
-    public ResponseEntity<String> processData(@RequestBody PersonDto person) {
+    public ResponseEntity<String> processData(@RequestBody PersonDto person,
+                                              @RequestHeader("Authorization") String authHeader) {
         PersonDto processedData = dataProcessingService.process(person);
 
-        // Отправляем обработанные данные в StorageService
-        webClient.post()
-                .uri("/storage/save")
+        webClientBuilder.build().post()
+                .uri("http://apigateway-service:8080/storage/save")
+                .header("Authorization", authHeader) // Прокидываем Bearer-токен
                 .bodyValue(processedData)
                 .retrieve()
                 .bodyToMono(Void.class)
